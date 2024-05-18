@@ -1,4 +1,4 @@
-// Mapping of state names to abbreviations
+// Mapping of state names to abbreviations for US states
 const stateAbbreviations = {
   Alabama: "AL",
   Alaska: "AK",
@@ -54,18 +54,38 @@ const stateAbbreviations = {
 
 async function getWeather() {
   const apiKey = "0564f2df0ce992ef9a9305c79039e747"; // Your OpenWeatherMap API key
-  const cityState = document.getElementById("city").value.trim();
-  const [city, stateAbbr] = cityState.split(",").map((str) => str.trim());
+  const location = document.getElementById("city").value.trim();
 
-  if (!city || !stateAbbr || stateAbbr.length !== 2) {
+  if (!location) {
     document.getElementById(
       "weather-info"
-    ).innerHTML = `<p>Please enter a valid city and state abbreviation (e.g., Houston, TX).</p>`;
+    ).innerHTML = `<p>Please enter a valid location.</p>`;
     return;
   }
 
-  // Use the OpenWeatherMap Geocoding API to get city data
-  const geocodeUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${city},${stateAbbr},US&limit=1&appid=${apiKey}`;
+  // Parse the location input to determine if it includes a city and state
+  const locationParts = location.split(",");
+  let city, stateAbbr, geocodeUrl;
+
+  if (locationParts.length === 2) {
+    // If input includes a comma, assume it's a US city/state combination
+    city = locationParts[0].trim();
+    stateAbbr = locationParts[1].trim().toUpperCase();
+
+    if (Object.values(stateAbbreviations).includes(stateAbbr)) {
+      // US location with valid state abbreviation
+      geocodeUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${city},${stateAbbr},US&limit=1&appid=${apiKey}`;
+    } else {
+      document.getElementById(
+        "weather-info"
+      ).innerHTML = `<p>Invalid US state abbreviation. Please check the input.</p>`;
+      return;
+    }
+  } else {
+    // Otherwise, treat it as a global city search
+    city = location;
+    geocodeUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${city}&limit=1&appid=${apiKey}`;
+  }
 
   try {
     const geocodeResponse = await fetch(geocodeUrl);
@@ -74,17 +94,19 @@ async function getWeather() {
     if (geocodeData.length === 0) {
       document.getElementById(
         "weather-info"
-      ).innerHTML = `<p>City not found. Please check the spelling or try another city.</p>`;
+      ).innerHTML = `<p>Location not found. Please check the spelling or try another location.</p>`;
       return;
     }
 
     const { name, state, country, lat, lon } = geocodeData[0];
 
-    if (stateAbbreviations[state] !== stateAbbr.toUpperCase()) {
-      document.getElementById(
-        "weather-info"
-      ).innerHTML = `<p>City not found in the specified state. Please check the spelling or try another city.</p>`;
-      return;
+    // For US locations, verify state abbreviation and build location string
+    let locationString = `${name}, ${country}`;
+    if (country === "US" && state) {
+      const stateAbbr = stateAbbreviations[state];
+      if (stateAbbr) {
+        locationString = `${name}, ${stateAbbr} - ${country}`;
+      }
     }
 
     // Use the latitude and longitude to get the weather data
@@ -94,7 +116,7 @@ async function getWeather() {
     const weatherData = await weatherResponse.json();
 
     if (weatherData.cod === 200) {
-      // Capitalize first letter of each word in the description
+      // Capitalize the first letter of each word in the description
       const description = weatherData.weather[0].description
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -104,12 +126,12 @@ async function getWeather() {
       const windSpeed = weatherData.wind.speed.toFixed(2);
 
       const weatherInfo = `
-              <h2>Weather in ${name}, ${stateAbbr.toUpperCase()} - ${country}</h2>
-              <p>Temperature: ${weatherData.main.temp}°F</p>
-              <p>Description: ${description}</p>
-              <p>Humidity: ${weatherData.main.humidity}%</p>
-              <p>Wind Speed: ${windSpeed} mph</p>
-          `;
+        <h2>Weather in ${locationString}</h2>
+        <p>Temperature: ${weatherData.main.temp}°F</p>
+        <p>Description: ${description}</p>
+        <p>Humidity: ${weatherData.main.humidity}%</p>
+        <p>Wind Speed: ${windSpeed} mph</p>
+      `;
       document.getElementById("weather-info").innerHTML = weatherInfo;
 
       // Set background image based on weather description
@@ -172,17 +194,15 @@ function setWeatherBackground(description) {
       break;
   }
 
-  // Preload the background image for smoother transitions
-  const img = new Image();
-  img.src = backgroundUrl.slice(4, -1).replace(/"/g, ""); // Remove url() around the image path
-  img.onload = () => {
-    document.body.style.backgroundImage = backgroundUrl;
-  };
+  document.body.style.backgroundImage = backgroundUrl;
 }
 
-// Add event listener to trigger getWeather on Enter key press
 document.getElementById("city").addEventListener("keypress", function (event) {
   if (event.key === "Enter") {
     getWeather();
   }
 });
+
+document
+  .getElementById("get-weather-btn")
+  .addEventListener("click", getWeather);
